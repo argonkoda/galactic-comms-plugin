@@ -1,0 +1,7 @@
+﻿<?xml version="1.0"?>
+<PluginManifest xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Name>GalacticComms</Name>
+  <Guid>5BF6C90C-F2B4-448D-B4DB-2B1C622358AC</Guid>
+  <Repository>None</Repository>
+  <Version>v1.0.0</Version>
+</PluginManifest>
