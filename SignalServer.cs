@@ -33,28 +33,21 @@ namespace GalacticComms
     public class SignalServerBehaviour : WebSocketBehavior
     {
         // Empty ATM. There isn't any form of reply, but might add some in the future
-        
     }
 
-    struct QualityPacket 
+    struct QualityPacket
     {
         public char packetId;
         public ulong fromId;
         public ulong toId;
         public float quality;
-
-        public byte[] ToBytes()
-        {
-            int size = Marshal.SizeOf(this);
-            byte[] arr = new byte[size];
-
-            IntPtr ptr = Marshal.AllocHGlobal(size);
-            Marshal.StructureToPtr(this, ptr, true);
-            Marshal.Copy(ptr, arr, 0, size);
-            Marshal.FreeHGlobal(ptr);
-            return arr;
-        }
     }
+
+    struct HeartbeatPacket
+    {
+        public char packetId;
+    }
+
 
     [Category("signal")]
     public class SignalServerCommands : CommandModule
@@ -214,19 +207,35 @@ namespace GalacticComms
 
         public override void Init(ITorchBase torch)
         {
+            Log.Info("Initialising Galctic Comms Torch Plugin...");
             base.Init(torch);
+            Log.Info("Setting up configuration...");
             SetupConfig();
-
+            Log.Info("Starting up voice server communication...");
             wssv = new WebSocketServer(IPAddress.Parse("127.0.0.1"), Config.Port, false);
             wssv.AddWebSocketService<SignalServerBehaviour>("/");
             wssv.Log.Level = WebSocketSharp.LogLevel.Warn;
-            wssv.Log.Output = (data, msg) => Log.Trace($"Websocket Log [{data.Level}]: {data.Message}");
+            wssv.Log.Output = (data, msg) => Log.Warn($"Websocket Log [{data.Level}]: {data.Message}");
             wssv.WebSocketServices.TryGetServiceHost("/", out host);
             wssv.Start();
+            Log.Info("Galactic Comms Initialisation COMPLETE");
 
         }
 
         public HashSet<MyCubeGrid> debugGrids = new HashSet<MyCubeGrid>();
+
+
+        byte[] ToBytes<T>(T data)
+        {
+            int size = Marshal.SizeOf(data);
+            byte[] arr = new byte[size];
+
+            IntPtr ptr = Marshal.AllocHGlobal(size);
+            Marshal.StructureToPtr(data, ptr, true);
+            Marshal.Copy(ptr, arr, 0, size);
+            Marshal.FreeHGlobal(ptr);
+            return arr;
+        }
 
         private void SendQualityPacket(ulong fromId, ulong toId, float quality)
         {
@@ -235,12 +244,19 @@ namespace GalacticComms
             packet.fromId = fromId;
             packet.toId = toId;
             packet.quality = quality;
-            SendQualityPacket(packet);
+            SendPacket(packet);
         }
 
-        private void SendQualityPacket(QualityPacket packet)
+        private void SendHeartbeatPacket()
         {
-            host.Sessions.Broadcast(packet.ToBytes());
+            HeartbeatPacket packet;
+            packet.packetId = 'H';
+            SendPacket(packet);
+        }
+
+        private void SendPacket<T>(T packet)
+        {
+            host.Sessions.Broadcast(ToBytes<T>(packet));
         }
 
         public double GetSignalStrength(MyDataBroadcaster from, MyDataReceiver to)
@@ -445,6 +461,7 @@ namespace GalacticComms
         public bool useNewMethod = true;
 
         private Stopwatch packetTimer = Stopwatch.StartNew();
+        private Stopwatch heartbeatTimer = Stopwatch.StartNew();
 
         private struct NodeCostPair
         {
@@ -595,6 +612,11 @@ namespace GalacticComms
         public override void Update()
         {
             base.Update();
+            if (heartbeatTimer.ElapsedMilliseconds > 5000)
+            {
+                SendHeartbeatPacket();
+                heartbeatTimer.Restart();
+            }
             if (packetTimer.ElapsedMilliseconds > 500)
             {
                 packetTimer.Restart();
